@@ -30,17 +30,21 @@ Uint32 lastTicks=0;
 
 SDL_Color bgcolor = {0x30,0x30,0x30,0xFF};
 SDL_Color fgcolor = {0xFF,0xFF,0xFF,0xFF};
-SDL_Color yellow = {255,255,0};
-SDL_Color white = {255,255,255};
-SDL_Color greyMed = {170,170,170};
-SDL_Color greyDark = {85,85,85};
-SDL_Color black = {0,0,0};
+SDL_Color yellow2 = {255,255,0};
+SDL_Color yellow1 = {170,170,0};
+SDL_Color yellow0 = {85,85,0};
+SDL_Color black3 = {255,255,255};
+SDL_Color black2 = {170,170,170};
+SDL_Color black1 = {85,85,85};
+SDL_Color black0 = {0,0,0};
 SDL_Color red0 = {85,0,0};
 SDL_Color red1 = {170,0,0};
 SDL_Color red2 = {255,0,0};
 SDL_Color green0 = {0,85,0};
 SDL_Color green1 = {0,170,0};
 SDL_Color green2 = {0,255,0};
+
+SDL_Color mapColor[] = {black1,black2,black3,red0,red1,red2,green0,green1,green2,yellow0,yellow1,yellow2};
 
 int mapX=8,mapY=8,mapS=64;
 int map[] =
@@ -50,11 +54,12 @@ int map[] =
 1,0,1,0,0,0,0,1,
 1,0,0,0,0,0,0,1,
 1,0,0,0,0,1,1,1,
-1,0,1,0,0,1,1,1,
-1,0,0,0,0,0,0,1,
+1,0,2,0,0,1,1,1,
+1,0,3,0,0,0,0,1,
 1,1,1,1,1,1,1,1,
 };
 
+void drawRoofFloor();
 void drawPlayer();
 void drawMap2D();
 void drawRays3D();
@@ -106,7 +111,7 @@ int main(int argc, char* argv[]) {
     window = SDL_CreateWindow(
             "Raycaster",
 //            SDL_WINDOWPOS_UNDEFINED,SDL_WINDOWPOS_UNDEFINED,
-            460,50,
+            50,50,
             SCREEN_WIDTH, SCREEN_HEIGHT,
             fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP:SDL_WINDOW_RESIZABLE);
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
@@ -188,6 +193,7 @@ void handleKey(SDL_Scancode scancode,int state) {
 
 void draw() {
     cls();
+    drawRoofFloor();
     drawMap2D();
     drawRays3D();
     drawPlayer();
@@ -203,15 +209,18 @@ void update(long ticks) {
         if(pa<0) {pa+=2*PI;}
         pdx=cos(pa)*5;
         pdy=sin(pa)*5;
-    } else if(controls[RIGHT]) {
+    }
+    if(controls[RIGHT]) {
         pa+=0.1;
         if(pa>2*PI) {pa-=2*PI;}
         pdx=cos(pa)*5;
         pdy=sin(pa)*5;
-    } else if(controls[UP]) {
+    }
+    if(controls[UP]) {
         px+=pdx;
         py+=pdy;
-    } else if(controls[DOWN]) {
+    }
+    if(controls[DOWN]) {
         px-=pdx;
         py-=pdy;
     }
@@ -242,18 +251,29 @@ void line(int x1,int y1,int x2,int y2) {
 }
 
 void drawPlayer() {
-    color(yellow);
+    color(yellow2);
     float w=PWIDTH/2;
     float h=PHEIGHT/2;
     box(px-w, py-h, PWIDTH, PHEIGHT);
     line(px,py,px+pdx*5,py+pdy*5);
 }
 
+void drawRoofFloor() {
+    color(green1);
+    box(530,0,60*8,159);
+    color(black1);
+    box(530,160,60*8,319);
+}
 void drawMap2D() {
     int x,y,xo,yo;
     for(y=0; y<mapY; y++) {
         for(x=0; x<mapX; x++) {
-            if(map[y*mapX+x]==1) {color(greyMed);} else { color(greyDark);}
+            int mp=map[y*mapX+x];
+            if(mp==0) {
+                color(mapColor[1]);
+            } else {
+                color(mapColor[mp * 3 + 2]);
+            }
             xo=x*mapS;
             yo=y*mapS;
             box(xo + 1, yo + 1, mapS - 2, mapS - 2);
@@ -266,9 +286,7 @@ float dist(float ax,float ay,float bx,float by,float ang) {
 }
 
 void drawRays3D() {
-    SDL_Color light=red2;
-    SDL_Color dark=red1;
-    int r,mx,my,mp,dof;
+    int r,mx,my,mp,dof,mpH,mpV;
     float rx,ry,ra,xo,yo,disT;
     ra=pa-DR*30; if(ra<0) { ra+=2*PI; } if(ra>2*PI) { ra-=2*PI;}
     for(r=0; r<60; r++) {
@@ -281,10 +299,9 @@ void drawRays3D() {
         if(ra==0 || ra==PI) {rx=px; ry=py; dof=8;}  //looking straight left or right
         while(dof<8) {
             mx=(int)(rx)>>6; my=(int)(ry)>>6; mp=my*mapX+mx;
-            if(mp>0 && mp<mapX*mapY && map[mp]==1) { hx=rx; hy=ry; disH=dist(px,py,hx,hy,ra); dof=8;} //hit wall
+            if(mp>0 && mp<mapX*mapY && map[mp]>0) { mpH=map[mp]; hx=rx; hy=ry; disH=dist(px,py,hx,hy,ra); dof=8;} //hit wall
             else { rx+=xo; ry+=yo; dof++; }    //next line
         }
-//        color(green1); line(px,py,rx,ry);
 
         //check vert lines
         dof=0;
@@ -295,21 +312,25 @@ void drawRays3D() {
         if(ra==0 || ra==PI) {rx=px; ry=py; dof=8;}  //looking straight up or down
         while(dof<8) {
             mx=(int)(rx)>>6; my=(int)(ry)>>6; mp=my*mapX+mx;
-            if(mp>0 && mp<mapX*mapY && map[mp]==1) { vx=rx; vy=ry; disV=dist(px,py,vx,vy,ra); dof=8; } //hit wall
+            if(mp>0 && mp<mapX*mapY && map[mp]>0) { mpV=map[mp]; vx=rx; vy=ry; disV=dist(px,py,vx,vy,ra); dof=8; } //hit wall
             else { rx+=xo; ry+=yo; dof++; }    //next line
         }
 //        if(map[mp]==2) {light=green2; dark=green1;}
-        if(disV<disH) { rx=vx; ry=vy; disT=disV; color(light); }          //vertical wall hit
-        if(disH<disV) { rx=hx; ry=hy; disT=disH; color(dark); }          //horizontal wall hit
+        int lightness=1;
+        if(disV<disH) { rx=vx; ry=vy; disT=disV; mp=mpV; lightness=1;}          //vertical wall hit
+        if(disH<disV) { rx=hx; ry=hy; disT=disH; mp=mpH; lightness=2;}          //horizontal wall hit
         line(px,py,rx,ry);
 
         //draw 3d walls
         float ca=pa-ra; if(ca<0){ca+=2*PI;} if(ca>2*PI){ca-=2*PI;} disT=disT*cos(ca);   //fix fisheye
         float lineH=(mapS*320)/disT; if(lineH>320){lineH=320;}      //line height
         float lineO=160-lineH/2;
-        box(r*8+530,lineO,8,lineH);
+        if(mp>=0 && mp<=3) {
+            color(mapColor[mp * 3 + lightness]);
+        }
+        box(r*8+530,lineO,8,lineH);     //draw a section of wall
         ra+=DR; if(ra<0) { ra+=2*PI; } if(ra>2*PI) { ra-=2*PI;}
     }
-    color(yellow);
-    rectangle(530,0,1024-530,320);
+    color(yellow2);
+    rectangle(530,0,60*8,320);
 }

@@ -14,12 +14,19 @@ using namespace std;
 #define PI 3.1415926535
 #define P2 PI/2
 #define P3 3*PI/2
+#define DR 0.0174533    //one degree in radians
+#define LEFT 0
+#define RIGHT 1
+#define UP 2
+#define DOWN 3
+
 
 bool running=true;
 SDL_Window* window;
 SDL_Renderer* renderer;
 bool fullscreen = false;
-float px=300,py=300,pdx,pdy,pa;     //player position
+float px,py,pdx,pdy,pa;     //player position
+Uint32 lastTicks=0;
 
 SDL_Color bgcolor = {0x30,0x30,0x30,0xFF};
 SDL_Color fgcolor = {0xFF,0xFF,0xFF,0xFF};
@@ -40,8 +47,8 @@ int map[] =
 {
 1,1,1,1,1,1,1,1,
 1,0,0,1,0,0,0,1,
-1,0,0,1,0,0,0,1,
-1,0,0,1,0,0,0,1,
+1,0,1,0,0,0,0,1,
+1,0,0,0,0,0,0,1,
 1,0,0,0,0,1,1,1,
 1,0,1,0,0,1,1,1,
 1,0,0,0,0,0,0,1,
@@ -60,7 +67,7 @@ void box(int x, int y, int w, int h);
 void line(int x1,int y1,int x2,int y2);
 void color(int r,int g,int b);
 void color(SDL_Color c);
-void handleKey(SDL_Scancode scancode);
+void handleKey(SDL_Scancode scancode,int state);
 void cls();
 
 int main(int argc, char* argv[]) {
@@ -121,8 +128,8 @@ int main(int argc, char* argv[]) {
 }
 
 void init() {
-    px=300;py=300;
-    pa=0;
+    px=275;py=275;
+    pa=4.75;        //point straight up
     pdx=cos(pa)*5;
     pdy=sin(pa)*5;
 }
@@ -147,8 +154,12 @@ void gameLoop() {
                     if(SDL_SCANCODE_ESCAPE==event.key.keysym.scancode) {
                         running=false;
                     } else {
-                        handleKey(event.key.keysym.scancode);
+                        handleKey(event.key.keysym.scancode,1);
                     }
+                    break;
+
+                case SDL_KEYUP:
+                    handleKey(event.key.keysym.scancode,0);
                     break;
                 default:
                     break;
@@ -163,29 +174,16 @@ void gameLoop() {
 void processMouseEvent(SDL_Event *event) {
 }
 
-void handleKey(SDL_Scancode scancode) {
+int controls[] = {0,0,0,0,0};
+void handleKey(SDL_Scancode scancode,int state) {
     switch(scancode) {
-        case SDL_SCANCODE_LEFT:
-            pa-=0.1;
-            if(pa<0) {pa+=2*PI;}
-            pdx=cos(pa)*5;
-            pdy=sin(pa)*5;
-            break;
-        case SDL_SCANCODE_RIGHT:
-            pa+=0.1;
-            if(pa>2*PI) {pa-=2*PI;}
-            pdx=cos(pa)*5;
-            pdy=sin(pa)*5;
-            break;
-        case SDL_SCANCODE_UP:
-            px+=pdx;
-            py+=pdy;
-            break;
-        case SDL_SCANCODE_DOWN:
-            px-=pdx;
-            py-=pdy;
-            break;
+        case SDL_SCANCODE_LEFT: controls[LEFT] = state; break;
+        case SDL_SCANCODE_RIGHT: controls[RIGHT] = state; break;
+        case SDL_SCANCODE_UP: controls[UP] = state; break;
+        case SDL_SCANCODE_DOWN: controls[DOWN] = state; break;
     }
+
+    printf("player=%d,%d angle=%f\n",(int)px,(int)py,pa);
 }
 
 void draw() {
@@ -197,7 +195,26 @@ void draw() {
 
 
 void update(long ticks) {
-
+    if(ticks-lastTicks<50)
+        return;
+    lastTicks = ticks;
+    if(controls[LEFT]) {
+        pa-=0.1;
+        if(pa<0) {pa+=2*PI;}
+        pdx=cos(pa)*5;
+        pdy=sin(pa)*5;
+    } else if(controls[RIGHT]) {
+        pa+=0.1;
+        if(pa>2*PI) {pa-=2*PI;}
+        pdx=cos(pa)*5;
+        pdy=sin(pa)*5;
+    } else if(controls[UP]) {
+        px+=pdx;
+        py+=pdy;
+    } else if(controls[DOWN]) {
+        px-=pdx;
+        py-=pdy;
+    }
 }
 
 void cls() {
@@ -249,10 +266,12 @@ float dist(float ax,float ay,float bx,float by,float ang) {
 }
 
 void drawRays3D() {
+    SDL_Color light=red2;
+    SDL_Color dark=red1;
     int r,mx,my,mp,dof;
-    float rx,ry,ra,xo,yo;
-    ra=pa;
-    for(r=0; r<1; r++) {
+    float rx,ry,ra,xo,yo,disT;
+    ra=pa-DR*30; if(ra<0) { ra+=2*PI; } if(ra>2*PI) { ra-=2*PI;}
+    for(r=0; r<60; r++) {
         //check horz lines
         dof=0;
         float disH=1000000,hx=px,hy=py;
@@ -262,7 +281,7 @@ void drawRays3D() {
         if(ra==0 || ra==PI) {rx=px; ry=py; dof=8;}  //looking straight left or right
         while(dof<8) {
             mx=(int)(rx)>>6; my=(int)(ry)>>6; mp=my*mapX+mx;
-            if(mp>0 && mp<mapX*mapY && map[mp]==1) {dof=8;} //hit wall
+            if(mp>0 && mp<mapX*mapY && map[mp]==1) { hx=rx; hy=ry; disH=dist(px,py,hx,hy,ra); dof=8;} //hit wall
             else { rx+=xo; ry+=yo; dof++; }    //next line
         }
 //        color(green1); line(px,py,rx,ry);
@@ -276,9 +295,21 @@ void drawRays3D() {
         if(ra==0 || ra==PI) {rx=px; ry=py; dof=8;}  //looking straight up or down
         while(dof<8) {
             mx=(int)(rx)>>6; my=(int)(ry)>>6; mp=my*mapX+mx;
-            if(mp>0 && mp<mapX*mapY && map[mp]==1) {dof=8;} //hit wall
+            if(mp>0 && mp<mapX*mapY && map[mp]==1) { vx=rx; vy=ry; disV=dist(px,py,vx,vy,ra); dof=8; } //hit wall
             else { rx+=xo; ry+=yo; dof++; }    //next line
         }
-        color(red2); line(px,py,rx,ry);
+//        if(map[mp]==2) {light=green2; dark=green1;}
+        if(disV<disH) { rx=vx; ry=vy; disT=disV; color(light); }          //vertical wall hit
+        if(disH<disV) { rx=hx; ry=hy; disT=disH; color(dark); }          //horizontal wall hit
+        line(px,py,rx,ry);
+
+        //draw 3d walls
+        float ca=pa-ra; if(ca<0){ca+=2*PI;} if(ca>2*PI){ca-=2*PI;} disT=disT*cos(ca);   //fix fisheye
+        float lineH=(mapS*320)/disT; if(lineH>320){lineH=320;}      //line height
+        float lineO=160-lineH/2;
+        box(r*8+530,lineO,8,lineH);
+        ra+=DR; if(ra<0) { ra+=2*PI; } if(ra>2*PI) { ra-=2*PI;}
     }
+    color(yellow);
+    rectangle(530,0,1024-530,320);
 }

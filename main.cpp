@@ -259,7 +259,7 @@ void drawPlayer() {
 }
 
 void drawRoofFloor() {
-    color(green1);
+    color(black2);
     box(530,0,60*8,159);
     color(black1);
     box(530,160,60*8,319);
